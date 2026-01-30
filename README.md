@@ -1,18 +1,18 @@
-# Rules Engine
+# Rule Engine
 
-A comprehensive rules engine for evaluating rules against items.
+Rule engine written in Rust for parsing and evaluating rules, with customisable tags and objects to evaluate against.
 
 ## Contents
 
-- [Rules Engine](#rules-engine)
-  - [Contents](#contents)
+- [Rule Engine](#rule-engine)
+   - [Contents](#contents)
 - [Rule DSL (Domain-Specific Language)](#rule-dsl-domain-specific-language)
-  - [Operators](#operators)
-  - [Examples](#examples)
+   - [Operators](#operators)
+   - [Examples](#examples)
 - [Config Files](#config-files)
-  - [1. Tags File (`.tags`)](#1-tags-file-tags)
-  - [2. Rules File (`.rules`)](#2-rules-file-rules)
-  - [3. Objects File (`.yaml`)](#3-objects-file-yaml)
+   - [1. Tags File (`.tags`)](#1-tags-file-tags)
+   - [2. Rules File (`.rules`)](#2-rules-file-rules)
+   - [3. Objects File (`.yaml`)](#3-objects-file-yaml)
 - [Parsing Rules](#parsing-rules)
 - [Engine Design](#engine-design)
 
@@ -102,8 +102,6 @@ Defines available tags (fields) and their possible values.
 **File:** `config/my_tags.tags`
 
 ```
-# Define the tags and their possible values to be used in rules
-
 - Colour: Blue, Green, Red
 - Shape: Circle, Rectangle, Square
 - Size: Small, Medium, Large
@@ -116,8 +114,6 @@ Contains the actual matching rules written in the DSL syntax.
 **File:** `config/my_rules.rules`
 
 ```
-# Define rules
-
 - (colour=blue,red) & shape!circle
 - (colour=green) | shape=rectangle
 ```
@@ -129,8 +125,6 @@ Contains items to be evaluated against the rules.
 **File:** `config/objects.yaml`
 
 ```yaml
-# Objects to be evaluated against defined rules
-
 items:
   - colour: [red, green]
     shape: rectangle
