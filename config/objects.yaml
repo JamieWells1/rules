@@ -1,10 +1,14 @@
 # Objects to be evualated against defined rules
 
+config:
+  # define whether to use defined items or generate them randomly
+  - use_defined_items: true
+
 items:
   - colour: [red, green]
     shape: rectangle
     size: large
-    
+
   - colour: green
     shape: circle
     size: small
