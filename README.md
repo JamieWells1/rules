@@ -1,14 +1,28 @@
-# Rules
+# Rules Engine
 
 A comprehensive rules engine for evaluating rules against items.
 
+## Contents
+
+- [Rules Engine](#rules-engine)
+  - [Contents](#contents)
+- [Rule DSL (Domain-Specific Language)](#rule-dsl-domain-specific-language)
+  - [Operators](#operators)
+  - [Examples](#examples)
+- [Config Files](#config-files)
+  - [1. Tags File (`.tags`)](#1-tags-file-tags)
+  - [2. Rules File (`.rules`)](#2-rules-file-rules)
+  - [3. Objects File (`.yaml`)](#3-objects-file-yaml)
+- [Parsing Rules](#parsing-rules)
+- [Engine Design](#engine-design)
+
 ---
 
-## Rule DSL (Domain-Specific Language)
+# Rule DSL (Domain-Specific Language)
 
 A simple, concise syntax for writing matching rules.
 
-### Operators
+## Operators
 
 - `=` - equals
 - `!` - not equals
@@ -17,7 +31,7 @@ A simple, concise syntax for writing matching rules.
 - `()` - grouping for precedence
 - `,` - shorthand for OR within the same field (e.g. `color=red | color=blue` becomes `color=red,blue`)
 
-### Examples
+## Examples
 
 **Simple equality:**
 
@@ -77,11 +91,11 @@ Matches: type is admin OR moderator, AND status is active, AND role is NOT guest
 
 ---
 
-## Config Files
+# Config Files
 
 The rules engine uses three configuration files in the `config/` directory:
 
-### 1. Tags File (`.tags`)
+## 1. Tags File (`.tags`)
 
 Defines available tags (fields) and their possible values.
 
@@ -95,7 +109,7 @@ Defines available tags (fields) and their possible values.
 - Size: Small, Medium, Large
 ```
 
-### 2. Rules File (`.rules`)
+## 2. Rules File (`.rules`)
 
 Contains the actual matching rules written in the DSL syntax.
 
@@ -108,7 +122,7 @@ Contains the actual matching rules written in the DSL syntax.
 - (colour=green) | shape=rectangle
 ```
 
-### 3. Objects File (`.yaml`)
+## 3. Objects File (`.yaml`)
 
 Contains items to be evaluated against the rules.
 
@@ -129,7 +143,7 @@ items:
 
 ---
 
-## Parsing Rules
+# Parsing Rules
 
 - **Comments:** Use `#` for comments in all config files
 - **Case-insensitive:** All parsing is case-insensitive
@@ -138,7 +152,7 @@ items:
 
 ---
 
-## Engine Design
+# Engine Design
 
 1. Parse each rule into disjunct normal form (DNF)
    - E.g. (ccy == "USD" || ccy == "GBP") && assCl == "BOND" --> (ccy == "USD" && assCl == "BOND") || (ccy == "GBP" && assCl == "BOND")
