@@ -1,1 +1,3 @@
-pub mod error;
+pub mod err;
+pub mod utils;
+pub mod parser;

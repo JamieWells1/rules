@@ -1,11 +1,7 @@
-mod error;
-use error::RuleEngineError;
+use rules_rs::{err::RulesError, parser::tags};
 
-fn main() {
-    println!("Hello, world!");
-    let a: i32 = 5;
-    if a < 4 {
-        let err = RuleEngineError::FileNotFound("No file found!".to_string());
-        println!("Error {:?}", err);
-    }
+fn main() -> Result<(), RulesError> {
+    let tags = tags::parse_tags()?;
+
+    Ok(())
 }

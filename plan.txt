@@ -1,0 +1,5 @@
+main.rs
+    -> parse tags and make enums of whats available
+    -> parse objects to make vector of maps, where each map corresponds with an object
+    -> parse rules into DNF and compare them with existing objects before adding to map
+    -> once rules are mapped and added, iterate through objects to check for matches

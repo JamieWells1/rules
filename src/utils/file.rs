@@ -1,18 +1,17 @@
 // File utils
+use crate::err::RulesError;
 
 use std::fs;
 
-fn read_file(path: &str) -> Result<String, std::io::error> {
-    let contents: String = fs::read_to_string(path)?;
-    Ok(contents)
-}
+use glob::glob;
 
-fn read_files_in_dir(dir_path: &str) -> Result<Vec<String, std::io::error>> {
+pub fn read_files_in_dir(pattern: &str) -> Result<Vec<String>, RulesError> {
     let mut contents = Vec::new();
 
-    for file in glob("config/*.rules")? {
+    for entry in glob(pattern)? {
         let path = entry?;
-        contents.push(read_file(path)?);
+        let file_content = fs::read_to_string(path)?;
+        contents.push(file_content);
     }
 
     Ok(contents)
