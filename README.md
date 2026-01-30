@@ -120,12 +120,12 @@ Contains the actual matching rules written in the DSL syntax.
 
 ## 3. Objects File (`.yaml`)
 
-Contains items to be evaluated against the rules.
+Contains objects to be evaluated against the rules.
 
 **File:** `config/objects.yaml`
 
 ```yaml
-items:
+objects:
   - colour: [red, green]
     shape: rectangle
     size: large

@@ -1,10 +1,10 @@
 # Objects to be evualated against defined rules
 
 config:
-  # define whether to use defined items or generate them randomly
-  - use_defined_items: true
+  # define whether to use defined objects or generate them randomly
+  - use_defined_objects: true
 
-items:
+objects:
   - colour: [red, green]
     shape: rectangle
     size: large
