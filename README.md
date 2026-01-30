@@ -15,6 +15,11 @@ Rule engine written in Rust for parsing and evaluating rules, with customisable 
    - [3. Objects File (`.yaml`)](#3-objects-file-yaml)
 - [Parsing Rules](#parsing-rules)
 - [Engine Design](#engine-design)
+   - [Step 1: Convert to Disjunctive Normal Form (DNF)](#step-1-convert-to-disjunctive-normal-form-dnf)
+   - [Step 2: Build Subrule Metadata](#step-2-build-subrule-metadata)
+   - [Step 3: Create Tag-to-Subrule Maps](#step-3-create-tag-to-subrule-maps)
+   - [Step 4: Match Objects Against Rules](#step-4-match-objects-against-rules)
+   - [Step 5: Determine Match Result](#step-5-determine-match-result)
 
 ---
 
@@ -148,12 +153,74 @@ objects:
 
 # Engine Design
 
-1. Parse each rule into disjunct normal form (DNF)
-   - E.g. (ccy == "USD" || ccy == "GBP") && assCl == "BOND" --> (ccy == "USD" && assCl == "BOND") || (ccy == "GBP" && assCl == "BOND")
-2. Iterate through each subrule and add mapped subrule to map of subrules, which contains how many times the subrule is present, and the operator used in the subrule
-   - E.g. { "SR1": { "expected_count": 2, "actual_count": 2 (initialised at 0), "operator": "eq" } }
-3. Iterate through each subrule (each DNF rule separated by the OR operator) and create a map for each tag found in subrules
-   - E.g. ccy map, where key = ccy (e.g. "USD") and value is which subrules it appears in --> ccy map: { "USD": ["SR1"], "GBP": ["SR2"] }
-4. Check operator and tag against item being matched against
-   - E.g. { "assCl": "EQTY", "ccy": "USD", "tkr": "AAPL" } --> if operator + tag corresponds with item, add to map. Else, don't add
-5. Check number of expected sub-rule counts with number of actual sub-rule counts, if equal, match the item with the rules. Else, item doesn't match
+The matching engine uses a DNF-based approach for efficient rule evaluation.
+
+## Step 1: Convert to Disjunctive Normal Form (DNF)
+
+Convert each rule into OR-of-ANDs format (each AND group is a "subrule").
+
+**Example:**
+
+```
+Original: (colour=blue,red) & shape!circle
+DNF:      (colour=blue & shape!circle) | (colour=red & shape!circle)
+          └────────── SR1 ───────────┘   └────────── SR2 ──────────┘
+```
+
+## Step 2: Build Subrule Metadata
+
+For each subrule, track how many clauses it contains and what operators are used.
+
+**Example:**
+
+```
+SR1: { expected_count: 2, actual_count: 0, operators: [ISEQ, NOEQ] }
+SR2: { expected_count: 2, actual_count: 0, clauses: [ISEQ, ISEQ] }
+```
+
+## Step 3: Create Tag-to-Subrule Maps
+
+For each tag, map its values to the subrules where they appear.
+
+**Example:**
+
+```
+colour map:
+  "blue" → [SR1]
+  "red"  → [SR2]
+
+shape map:
+  "circle" → [SR1, SR2]  (appears in both with ! operator)
+```
+
+## Step 4: Match Objects Against Rules
+
+For each object, check which clauses match and increment the `actual_count` for matching subrules.
+
+**Example object:**
+
+```yaml
+colour: blue
+shape: square
+size: large
+```
+
+Matching process:
+
+- `colour=blue` matches → increment `SR1.actual_count` to 1
+- `shape!circle` matches (square ≠ circle) → increment `SR1.actual_count` to 2
+- `shape!circle` matches → increment `SR2.actual_count` to 1
+- `colour=red` doesn't match → `SR2.actual_count` stays at 1
+
+## Step 5: Determine Match Result
+
+A rule matches if **any subrule** has `actual_count == expected_count`.
+
+**Example:**
+
+```
+SR1: actual_count = 2, expected_count = 2 → MATCH ✓
+SR2: actual_count = 1, expected_count = 2 → no match
+
+Overall: MATCH (at least one subrule matched)
+```

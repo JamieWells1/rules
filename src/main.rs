@@ -1,7 +1,6 @@
-use rules_rs::{err::RulesError, parser::tags};
+use rules_rs::orchestrator::Orchestrator;
+use rules_rs::err::RulesError;
 
 fn main() -> Result<(), RulesError> {
-    let tags = tags::parse_tags()?;
-
-    Ok(())
+    Orchestrator::run()
 }
