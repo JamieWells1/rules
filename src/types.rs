@@ -4,17 +4,20 @@
 
 use std::collections::HashMap;
 
-// colour
+// Tag name -- e.g. "colour"
 pub type TagName = String;
 
-// red, green
+// Tag values -- e.g. ["red", "green"]
 pub type TagValues = Vec<String>;
 
-// 1
+// Number of subrule -- e.g. 1
 pub type SubRuleNumber = i32;
 
-// "colour": ["green"]
+// Object structure -- e.g. "colour": ["green"]
 pub type Object = HashMap<String, Vec<String>>;
+
+// Clause in subrule -- e.g. "colour": "green"
+pub type TagKvMap = HashMap<String, String>;
 
 // Structs
 
@@ -36,10 +39,12 @@ pub enum LogicalOp {
     OR,
 }
 
+// No. elements (tag_kvs) should be == no. elements (comparison_op - 1)
 pub struct SubRule {
     pub expected_count: i32,
     pub actual_count: i32,
     pub comparison_ops: Vec<ComparisonOp>,
+    pub tag_kvs: TagKvMap,
 }
 
 // Impls
@@ -49,7 +54,8 @@ impl Default for SubRule {
         SubRule {
             expected_count: 2,
             actual_count: 0,
-            comparison_ops: vec![],
+            comparison_ops: Vec::new(),
+            tag_kvs: HashMap::new(),
         }
     }
 }

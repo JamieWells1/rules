@@ -1,10 +1,5 @@
 # Define the objects to be evualated against defined rules
 
-config:
-  # define whether to use defined objects or generate them randomly
-  - generate_objects: true
-  - objects_to_generate: 100
-
 objects:
   shapes:
     - colour: [red, green]

@@ -15,11 +15,13 @@ Rule engine written in Rust for parsing and evaluating rules, with customisable 
   - [3. Objects File (`.yaml`)](#3-objects-file-yaml)
 - [Parsing Rules](#parsing-rules)
 - [Engine Design](#engine-design)
-  - [Step 1: Convert to Disjunctive Normal Form (DNF)](#step-1-convert-to-disjunctive-normal-form-dnf)
-  - [Step 2: Build Subrule Metadata](#step-2-build-subrule-metadata)
-  - [Step 3: Create Tag-to-Subrule Maps](#step-3-create-tag-to-subrule-maps)
-  - [Step 4: Match Objects Against Rules](#step-4-match-objects-against-rules)
-  - [Step 5: Determine Match Result](#step-5-determine-match-result)
+  - [Step 1: Index and Validate Tags (Parser)](#step-1-index-and-validate-tags-parser)
+  - [Step 2: Validate and Convert Rules to Disjunctive Normal Form (DNF) (Parser)](#step-2-validate-and-convert-rules-to-disjunctive-normal-form-dnf-parser)
+  - [Step 3: Validate and Build Map of Objects (Parser)](#step-3-validate-and-build-map-of-objects-parser)
+  - [Step 4: Build Subrule Metadata (Engine)](#step-4-build-subrule-metadata-engine)
+  - [Step 5: Create Tag-to-Subrule Maps (Engine)](#step-5-create-tag-to-subrule-maps-engine)
+  - [Step 6: Match Objects Against Rules (Engine)](#step-6-match-objects-against-rules-engine)
+  - [Step 7: Determine Match Result (Engine)](#step-7-determine-match-result-engine)
 
 ---
 
@@ -185,7 +187,11 @@ The type name (e.g., `shapes`, `cars`) is automatically assigned to each object 
 
 The matching engine uses a DNF-based approach for efficient rule evaluation.
 
-## Step 1: Convert to Disjunctive Normal Form (DNF)
+## Step 1: Index and Validate Tags (Parser)
+
+Parse the tags file and build an index of all available tags and their valid values. Validate the format and ensure each tag has a unique name and at least one value.
+
+## Step 2: Validate and Convert Rules to Disjunctive Normal Form (DNF) (Parser)
 
 Convert each rule into OR-of-ANDs format (each AND group is a "subrule").
 
@@ -197,7 +203,11 @@ DNF:      (colour=blue & shape!circle) | (colour=red & shape!circle)
           └────────── SR1 ───────────┘   └────────── SR2 ──────────┘
 ```
 
-## Step 2: Build Subrule Metadata
+## Step 3: Validate and Build Map of Objects (Parser)
+
+Parse the objects YAML file and build a map of all objects to evaluate. Validate that each object has valid structure and assign object types based on their grouping in the YAML file.
+
+## Step 4: Build Subrule Metadata (Engine)
 
 For each subrule, track how many clauses it contains and what operators are used.
 
@@ -208,7 +218,7 @@ SR1: { expected_count: 2, actual_count: 0, operators: [ISEQ, NOEQ] }
 SR2: { expected_count: 2, actual_count: 0, clauses: [ISEQ, ISEQ] }
 ```
 
-## Step 3: Create Tag-to-Subrule Maps
+## Step 5: Create Tag-to-Subrule Maps (Engine)
 
 For each tag, map its values to the subrules where they appear.
 
@@ -223,7 +233,7 @@ shape map:
   "circle" → [SR1, SR2]  (appears in both with ! operator)
 ```
 
-## Step 4: Match Objects Against Rules
+## Step 6: Match Objects Against Rules (Engine)
 
 For each object, check which clauses match and increment the `actual_count` for matching subrules.
 
@@ -242,7 +252,7 @@ Matching process:
 - `shape!circle` matches → increment `SR2.actual_count` to 1
 - `colour=red` doesn't match → `SR2.actual_count` stays at 1
 
-## Step 5: Determine Match Result
+## Step 7: Determine Match Result (Engine)
 
 A rule matches if **any subrule** has `actual_count == expected_count`.
 

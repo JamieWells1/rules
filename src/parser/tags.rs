@@ -94,7 +94,7 @@ pub fn get_name_and_values_from_tag(line: &str) -> Result<(String, Vec<String>),
 }
 
 pub fn parse_tags() -> Result<Vec<Tag>, RulesError> {
-    let mut tags: Vec<Tag> = vec![];
+    let mut tags: Vec<Tag> = Vec::new();
     let all_files: Vec<String> = file::read_files_in_dir("config/*.tags")?;
 
     for file in all_files.iter() {
