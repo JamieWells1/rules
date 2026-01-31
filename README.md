@@ -23,7 +23,9 @@ Rule engine written in Rust for parsing and evaluating rules, with customisable 
 
 ---
 
-> **Note**: Easy to understand, correctly configured config files are already present if you'd like to get started right away.
+> ### ***Note**: Easy to understand config files are already present if you'd like to get started right away.*
+
+---
 
 # Rule DSL (Domain-Specific Language)
 
@@ -135,21 +137,21 @@ Contains objects to be evaluated against the rules. Objects are grouped by type 
 objects:
   shapes:
     - colour: [red, green]
-    - shape: rectangle
-    - size: large
+      shape: rectangle
+      size: large
 
     - colour: green
-    - shape: circle
-    - size: small
+      shape: circle
+      size: small
 
   cars:
     - colour: grey
-    - size: small
-    - doors: 3
+      size: small
+      doors: 3
 
     - colour: black
-    - size: large
-    - doors: 5
+      size: large
+      doors: 5
 ```
 
 **Adding new object types:**
@@ -250,5 +252,5 @@ A rule matches if **any subrule** has `actual_count == expected_count`.
 SR1: actual_count = 2, expected_count = 2 → MATCH ✓
 SR2: actual_count = 1, expected_count = 2 → no match
 
-Overall: MATCH (at least one subrule matched)
+Result: MATCH
 ```

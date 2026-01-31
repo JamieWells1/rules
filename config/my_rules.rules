@@ -1,4 +1,4 @@
-# Define rules
+# Define the rules
 
 - (colour = blue, red) & shape ! circle
 - (colour = green) | shape = rectangle

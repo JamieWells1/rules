@@ -11,7 +11,7 @@ pub struct Orchestrator {
 }
 
 impl Orchestrator {
-    fn initialise_tags(&mut self) -> Result<(), RulesError> {
+    fn map_tags(&mut self) -> Result<(), RulesError> {
         let tags: Vec<types::Tag> = tags::parse_tags()?;
         for tag in tags {
             self.m_tags.insert(tag.name, tag.values);
@@ -20,7 +20,8 @@ impl Orchestrator {
         Ok(())
     }
 
-    fn initialise_objects(&mut self) -> Result<(), RulesError> {
+    fn map_subrules(&mut self) -> Result<(), RulesError> {
+        // Tokenise rules, parse them into sub-rules in DNF, store them
         Ok(())
     }
 
@@ -28,8 +29,8 @@ impl Orchestrator {
         let mut orch: Orchestrator = Orchestrator::default();
 
         // Initial parsing and orchestator mutation
-        orch.initialise_tags()?;
-        orch.initialise_objects()?;
+        orch.map_tags()?;
+        orch.map_subrules()?;
 
         Ok(())
     }

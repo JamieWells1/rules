@@ -2,9 +2,19 @@
 
 // Aliases
 
+use std::collections::HashMap;
+
+// colour
 pub type TagName = String;
+
+// red, green
 pub type TagValues = Vec<String>;
+
+// 1
 pub type SubRuleNumber = i32;
+
+// "colour": ["green"]
+pub type Object = HashMap<String, Vec<String>>;
 
 // Structs
 

@@ -1,5 +1,5 @@
-use rules_rs::orchestrator::Orchestrator;
-use rules_rs::err::RulesError;
+use rules::orchestrator::Orchestrator;
+use rules::err::RulesError;
 
 fn main() -> Result<(), RulesError> {
     Orchestrator::run()
