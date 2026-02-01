@@ -2,6 +2,3 @@
 
 - (colour = blue, red) & shape ! circle
 - colour = green | shape = rectangle
-
-(colour = green, red) | shape = rectangle & size ! small
-(colour=green,red)|shape=rectangle&size!small
