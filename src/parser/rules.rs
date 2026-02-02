@@ -23,25 +23,36 @@ impl RuleParser {
     /// Infers the expected type of the next token based on parsing context.
     /// Uses the last token (and sometimes second-to-last) to determine what should come next.
     /// Example: after '(' we expect TagName, after '=' we expect TagValue
-    fn get_expected_token_type(parsed_tokens: &Vec<String>) -> Result<TokenType, RulesError> {
+    fn get_expected_token_type(
+        parsed_tokens: &Vec<String>,
+        parenthesis_depth: i32,
+    ) -> Result<TokenType, RulesError> {
         let last_token = parsed_tokens
             .last()
-            .ok_or_else(|| RulesError::RuleParseError("No tokens to parse.".to_string()))?;
+            .ok_or_else(|| RulesError::RuleParseError("Empty token vector".to_string()))?;
 
-        // Check if last token is a single-character operator
+        // Last token is an operator
         let c = if last_token.len() == 1 {
             last_token.chars().next()
         } else {
             None
         };
 
-        // Last token is an operator
         if let Some(ch) = c {
+            // Last token is an operator
             if ALL_OP_CHARS.contains(&ch) {
                 if ch == '(' {
-                    Ok(TokenType::TagName)
+                    // After '(', could be TagName or another '(' for nesting
+                    Ok(TokenType::TagName) // Both '(' and TagName are valid here
                 } else if ch == ')' {
-                    Ok(TokenType::LogicalOp)
+                    // After ')', could be LogicalOp, another ')', or end of expression
+                    if parenthesis_depth > 0 {
+                        // Still inside parens, could be ')' or LogicalOp
+                        Ok(TokenType::LogicalOp) // Accept both
+                    } else {
+                        // All parens closed, must be LogicalOp or end
+                        Ok(TokenType::LogicalOp)
+                    }
                 } else if RHS_CHARS.contains(&ch) {
                     Ok(TokenType::TagValue)
                 } else if LHS_CHARS.contains(&ch) {
@@ -57,7 +68,7 @@ impl RuleParser {
                 ))
             }
         } else {
-            // Last token is a word (TagName/TagValue), look at the operator before it
+            // Last token is a word, check operator before it
             let second_to_last_token = &parsed_tokens[parsed_tokens.len() - 2];
             if second_to_last_token.len() > 1 {
                 return Err(RulesError::RuleParseError(
@@ -87,55 +98,47 @@ impl RuleParser {
         }
     }
 
-    /// Tokenizes a rule string into a map of tokens with their types.
-    /// Splits on operator characters while preserving them as separate tokens.
-    /// Example: "colour = red" -> {"colour": TagName, "=": ComparisonOp, "red": TagValue}
     fn map_rule_tokens(rule: &str) -> Result<MappedRuleTokens, RulesError> {
         let mut token_map: HashMap<String, TokenType> = HashMap::new();
         let mut parsed_tokens: Vec<String> = Vec::new();
         let mut current_word = String::new();
+        let mut parenthesis_depth = 0;
 
         for c in rule.trim().chars() {
             if ALL_OP_CHARS.contains(&c) {
-                // Flush accumulated word before adding operator
                 if !current_word.is_empty() {
-                    let expected_token_type = Self::get_expected_token_type(&parsed_tokens)
-                        .map_err(|rule| {
-                            RulesError::RuleParseError(format!("Error parsing rule: {}", rule))
-                        })?;
+                    let expected_token_type =
+                        Self::get_expected_token_type(&parsed_tokens, parenthesis_depth)?;
                     parsed_tokens.push(current_word.trim().to_string());
                     token_map.insert(current_word.trim().to_string(), expected_token_type);
                     current_word.clear();
                 }
 
                 let expected_token_type =
-                    Self::get_expected_token_type(&parsed_tokens).map_err(|rule| {
-                        RulesError::RuleParseError(format!("Error parsing rule: {}", rule))
-                    })?;
+                    Self::get_expected_token_type(&parsed_tokens, parenthesis_depth)?;
                 token_map.insert(c.to_string(), expected_token_type);
-            } else if c == ' ' {
-                // Space acts as word boundary
-                if !current_word.is_empty() {
-                    let expected_token_type = Self::get_expected_token_type(&parsed_tokens)
-                        .map_err(|rule| {
-                            RulesError::RuleParseError(format!("Error parsing rule: {}", rule))
-                        })?;
-                    token_map.insert(current_word.trim().to_string(), expected_token_type);
-                    current_word.clear();
+                parsed_tokens.push(c.to_string());
+
+                // Update parenthesis depth after processing token
+                if c == '(' {
+                    parenthesis_depth += 1;
+                } else if c == ')' {
+                    parenthesis_depth -= 1;
+                    if parenthesis_depth < 0 {
+                        return Err(RulesError::RuleParseError(
+                            "Unmatched closing parenthesis".to_string(),
+                        ));
+                    }
                 }
-            } else {
-                // Accumulate characters into current word
-                current_word.push(c);
+            } else if c == ' ' {
+                // ... rest of the logic
             }
         }
 
-        // Flush final word if present
-        if !current_word.is_empty() {
-            let expected_token_type =
-                Self::get_expected_token_type(&parsed_tokens).map_err(|rule| {
-                    RulesError::RuleParseError(format!("Error parsing rule: {}", rule))
-                })?;
-            token_map.insert(current_word.trim().to_string(), expected_token_type);
+        if parenthesis_depth != 0 {
+            return Err(RulesError::RuleParseError(
+                "Unmatched opening parenthesis".to_string(),
+            ));
         }
 
         Ok(token_map)
