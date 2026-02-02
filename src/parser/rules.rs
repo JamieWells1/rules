@@ -1,9 +1,9 @@
 // Parser for .rules files
+use crate::err::RulesError;
 use crate::parser::types::{MappedRuleTokens, Rule, TokenType};
-use crate::types::{self, SubRule};
+use crate::types::{self, SubRule, TagName};
 use crate::utils::file;
 use crate::utils::string;
-use crate::err::RulesError;
 
 use std::collections::HashMap;
 
@@ -173,15 +173,48 @@ impl RuleParser {
         Ok(mapped_token_list)
     }
 
-    fn check_rule_syntax(tokens: &MappedRuleTokens) -> bool {
-        for (i, value) in tokens.into_iter().enumerate() {
-            // TODO
-            if token[i] == "(" {
-                return true;
+    fn check_rule_syntax(tokens: &MappedRuleTokens) -> Result<(), RulesError> {
+        let mut prev_token: Option<&TokenType> = None;
+
+        for (key, token_type) in tokens.iter() {
+            if key == "(" || key == ")" {
+                continue;
             }
-            return false;
+
+            match (prev_token, token_type) {
+                // Valid transitions
+                (None, TokenType::TagName) => {}
+                (Some(TokenType::TagName), TokenType::ComparisonOp) => {}
+                (Some(TokenType::ComparisonOp), TokenType::TagValue) => {}
+                (Some(TokenType::TagValue), TokenType::LogicalOp) => {}
+                (Some(TokenType::LogicalOp), TokenType::TagName) => {}
+
+                // Invalid transitions
+                (None, _) => {
+                    return Err(RulesError::RuleParseError(format!(
+                        "Rule must start with a tag name, found {:?}",
+                        token_type
+                    )));
+                }
+                (Some(prev), current) => {
+                    return Err(RulesError::RuleParseError(format!(
+                        "Invalid token sequence: {:?} followed by {:?}",
+                        prev, current
+                    )));
+                }
+            }
+
+            prev_token = Some(token_type);
         }
-        return false;
+
+        match prev_token {
+            Some(TokenType::TagValue) => Ok(()),
+            Some(other) => Err(RulesError::RuleParseError(format!(
+                "Rule must end with a tag value, ended with {:?}",
+                other
+            ))),
+            None => Err(RulesError::RuleParseError("Empty rule".to_string())),
+        }
     }
 
     fn validate_rule(line: &str) -> Result<(), RulesError> {
@@ -189,13 +222,10 @@ impl RuleParser {
             return Ok(());
         }
 
-        let line = string::normalise(line);
+        let line = string::normalise(line)?;
         let tokens: MappedRuleTokens = Self::map_rule_tokens(&line)?;
 
-        let is_valid_rule: bool = Self::check_rule_syntax(&tokens);
-
-        // NEXT TASK: Ensure that parts conform to correct syntactical structure
-
+        Self::check_rule_syntax(&tokens)?;
         Ok(())
     }
 
@@ -244,14 +274,8 @@ mod tests {
     use super::*;
 
     // Find a token in the token list
-    fn find_token<'a>(
-        tokens: &'a [(String, TokenType)],
-        token_str: &str,
-    ) -> Option<&'a TokenType> {
-        tokens
-            .iter()
-            .find(|(s, _)| s == token_str)
-            .map(|(_, t)| t)
+    fn find_token<'a>(tokens: &'a [(String, TokenType)], token_str: &str) -> Option<&'a TokenType> {
+        tokens.iter().find(|(s, _)| s == token_str).map(|(_, t)| t)
     }
 
     // Count occurrences of a token
@@ -523,5 +547,308 @@ mod tests {
         assert_eq!(find_token(&tokens, "colour"), Some(&TokenType::TagName));
         assert_eq!(find_token(&tokens, "="), Some(&TokenType::ComparisonOp));
         assert_eq!(find_token(&tokens, "red"), Some(&TokenType::TagValue));
+    }
+
+    // Tests for check_rule_syntax
+    #[test]
+    fn test_check_rule_syntax_valid_simple() {
+        let tokens = vec![
+            ("colour".to_string(), TokenType::TagName),
+            ("=".to_string(), TokenType::ComparisonOp),
+            ("red".to_string(), TokenType::TagValue),
+        ];
+        let result = RuleParser::check_rule_syntax(&tokens);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_check_rule_syntax_valid_with_parentheses() {
+        let tokens = vec![
+            ("(".to_string(), TokenType::TagName),
+            ("colour".to_string(), TokenType::TagName),
+            ("=".to_string(), TokenType::ComparisonOp),
+            ("red".to_string(), TokenType::TagValue),
+            (")".to_string(), TokenType::LogicalOp),
+        ];
+        let result = RuleParser::check_rule_syntax(&tokens);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_check_rule_syntax_valid_with_logical_op() {
+        let tokens = vec![
+            ("colour".to_string(), TokenType::TagName),
+            ("=".to_string(), TokenType::ComparisonOp),
+            ("red".to_string(), TokenType::TagValue),
+            ("&".to_string(), TokenType::LogicalOp),
+            ("size".to_string(), TokenType::TagName),
+            ("=".to_string(), TokenType::ComparisonOp),
+            ("large".to_string(), TokenType::TagValue),
+        ];
+        let result = RuleParser::check_rule_syntax(&tokens);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_check_rule_syntax_valid_complex() {
+        let tokens = vec![
+            ("(".to_string(), TokenType::TagName),
+            ("colour".to_string(), TokenType::TagName),
+            ("=".to_string(), TokenType::ComparisonOp),
+            ("red".to_string(), TokenType::TagValue),
+            (")".to_string(), TokenType::LogicalOp),
+            ("&".to_string(), TokenType::LogicalOp),
+            ("(".to_string(), TokenType::TagName),
+            ("size".to_string(), TokenType::TagName),
+            ("!".to_string(), TokenType::ComparisonOp),
+            ("small".to_string(), TokenType::TagValue),
+            (")".to_string(), TokenType::LogicalOp),
+        ];
+        let result = RuleParser::check_rule_syntax(&tokens);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_check_rule_syntax_starts_with_comparison_op() {
+        let tokens = vec![
+            ("=".to_string(), TokenType::ComparisonOp),
+            ("red".to_string(), TokenType::TagValue),
+        ];
+        let result = RuleParser::check_rule_syntax(&tokens);
+        assert!(result.is_err());
+        if let Err(RulesError::RuleParseError(msg)) = result {
+            assert!(msg.contains("must start with a tag name"));
+        } else {
+            panic!("Expected RuleParseError");
+        }
+    }
+
+    #[test]
+    fn test_check_rule_syntax_starts_with_tag_value() {
+        let tokens = vec![
+            ("red".to_string(), TokenType::TagValue),
+            ("&".to_string(), TokenType::LogicalOp),
+        ];
+        let result = RuleParser::check_rule_syntax(&tokens);
+        assert!(result.is_err());
+        if let Err(RulesError::RuleParseError(msg)) = result {
+            assert!(msg.contains("must start with a tag name"));
+        } else {
+            panic!("Expected RuleParseError");
+        }
+    }
+
+    #[test]
+    fn test_check_rule_syntax_two_tag_names_in_a_row() {
+        let tokens = vec![
+            ("colour".to_string(), TokenType::TagName),
+            ("size".to_string(), TokenType::TagName),
+            ("=".to_string(), TokenType::ComparisonOp),
+            ("red".to_string(), TokenType::TagValue),
+        ];
+        let result = RuleParser::check_rule_syntax(&tokens);
+        assert!(result.is_err());
+        if let Err(RulesError::RuleParseError(msg)) = result {
+            assert!(msg.contains("Invalid token sequence"));
+        } else {
+            panic!("Expected RuleParseError");
+        }
+    }
+
+    #[test]
+    fn test_check_rule_syntax_two_comparison_ops_in_a_row() {
+        let tokens = vec![
+            ("colour".to_string(), TokenType::TagName),
+            ("=".to_string(), TokenType::ComparisonOp),
+            ("!".to_string(), TokenType::ComparisonOp),
+            ("red".to_string(), TokenType::TagValue),
+        ];
+        let result = RuleParser::check_rule_syntax(&tokens);
+        assert!(result.is_err());
+        if let Err(RulesError::RuleParseError(msg)) = result {
+            assert!(msg.contains("Invalid token sequence"));
+        } else {
+            panic!("Expected RuleParseError");
+        }
+    }
+
+    #[test]
+    fn test_check_rule_syntax_two_tag_values_in_a_row() {
+        let tokens = vec![
+            ("colour".to_string(), TokenType::TagName),
+            ("=".to_string(), TokenType::ComparisonOp),
+            ("red".to_string(), TokenType::TagValue),
+            ("blue".to_string(), TokenType::TagValue),
+        ];
+        let result = RuleParser::check_rule_syntax(&tokens);
+        assert!(result.is_err());
+        if let Err(RulesError::RuleParseError(msg)) = result {
+            assert!(msg.contains("Invalid token sequence"));
+        } else {
+            panic!("Expected RuleParseError");
+        }
+    }
+
+    #[test]
+    fn test_check_rule_syntax_two_logical_ops_in_a_row() {
+        let tokens = vec![
+            ("colour".to_string(), TokenType::TagName),
+            ("=".to_string(), TokenType::ComparisonOp),
+            ("red".to_string(), TokenType::TagValue),
+            ("&".to_string(), TokenType::LogicalOp),
+            ("|".to_string(), TokenType::LogicalOp),
+            ("size".to_string(), TokenType::TagName),
+        ];
+        let result = RuleParser::check_rule_syntax(&tokens);
+        assert!(result.is_err());
+        if let Err(RulesError::RuleParseError(msg)) = result {
+            assert!(msg.contains("Invalid token sequence"));
+        } else {
+            panic!("Expected RuleParseError");
+        }
+    }
+
+    #[test]
+    fn test_check_rule_syntax_ends_with_tag_name() {
+        let tokens = vec![
+            ("colour".to_string(), TokenType::TagName),
+            ("=".to_string(), TokenType::ComparisonOp),
+            ("red".to_string(), TokenType::TagValue),
+            ("&".to_string(), TokenType::LogicalOp),
+            ("size".to_string(), TokenType::TagName),
+        ];
+        let result = RuleParser::check_rule_syntax(&tokens);
+        assert!(result.is_err());
+        if let Err(RulesError::RuleParseError(msg)) = result {
+            assert!(msg.contains("must end with a tag value"));
+        } else {
+            panic!("Expected RuleParseError");
+        }
+    }
+
+    #[test]
+    fn test_check_rule_syntax_ends_with_comparison_op() {
+        let tokens = vec![
+            ("colour".to_string(), TokenType::TagName),
+            ("=".to_string(), TokenType::ComparisonOp),
+        ];
+        let result = RuleParser::check_rule_syntax(&tokens);
+        assert!(result.is_err());
+        if let Err(RulesError::RuleParseError(msg)) = result {
+            assert!(msg.contains("must end with a tag value"));
+        } else {
+            panic!("Expected RuleParseError");
+        }
+    }
+
+    #[test]
+    fn test_check_rule_syntax_ends_with_logical_op() {
+        let tokens = vec![
+            ("colour".to_string(), TokenType::TagName),
+            ("=".to_string(), TokenType::ComparisonOp),
+            ("red".to_string(), TokenType::TagValue),
+            ("&".to_string(), TokenType::LogicalOp),
+        ];
+        let result = RuleParser::check_rule_syntax(&tokens);
+        assert!(result.is_err());
+        if let Err(RulesError::RuleParseError(msg)) = result {
+            assert!(msg.contains("must end with a tag value"));
+        } else {
+            panic!("Expected RuleParseError");
+        }
+    }
+
+    #[test]
+    fn test_check_rule_syntax_empty_rule() {
+        let tokens = vec![];
+        let result = RuleParser::check_rule_syntax(&tokens);
+        assert!(result.is_err());
+        if let Err(RulesError::RuleParseError(msg)) = result {
+            assert!(msg.contains("Empty rule"));
+        } else {
+            panic!("Expected RuleParseError");
+        }
+    }
+
+    #[test]
+    fn test_check_rule_syntax_only_parentheses() {
+        let tokens = vec![
+            ("(".to_string(), TokenType::TagName),
+            (")".to_string(), TokenType::LogicalOp),
+        ];
+        let result = RuleParser::check_rule_syntax(&tokens);
+        assert!(result.is_err());
+        if let Err(RulesError::RuleParseError(msg)) = result {
+            assert!(msg.contains("Empty rule"));
+        } else {
+            panic!("Expected RuleParseError");
+        }
+    }
+
+    // Tests for validate_rule
+    // Note: validate_rule expects rules to start with '-' (as they appear in config files)
+    // and normalizes them by removing the first character
+    #[test]
+    fn test_validate_rule_valid() {
+        let valid_rules = vec![
+            "-colour = red",
+            "-colour = red & size = large",
+            "-colour = red | colour = blue",
+            "-(colour = red)",
+            "-(colour = red) & (size = large)",
+            "-((colour = red) | (colour = blue)) & (size = large)",
+            "-colour ! red",
+            "-colour = red & size ! small",
+        ];
+
+        for rule in valid_rules {
+            let result = RuleParser::validate_rule(rule);
+            assert!(result.is_ok(), "Expected rule to be valid: {}", rule);
+        }
+    }
+
+    #[test]
+    fn test_validate_rule_invalid() {
+        let invalid_rules = vec![
+            // Missing dash at start
+            "colour = red",
+            "colour = red & size = large",
+            "(colour = red)",
+            // Multiple dashes
+            "-colour = -red",
+            "-colour - red",
+            "--colour = red",
+            "-colour = red & -size = large",
+            // Missing operands (remember first char is skipped)
+            "-colour =",
+            "-= red",
+            "-colour",
+            // Double operators
+            "-colour = = red",
+            "-colour red",
+            // Ending with operator
+            "-colour = red &",
+            "-colour = red |",
+            // Starting with operator (after '-' is removed)
+            "-& colour = red",
+            "-| colour = red",
+            // Mismatched parentheses
+            "-(colour = red",
+            "-colour = red)",
+            "-((colour = red)",
+            // Empty or only operators (first char removed)
+            "--",
+            "-=",
+            "-&",
+            "-()",
+            // Invalid sequences
+            "-colour & size = large",
+            "-colour = red blue",
+        ];
+
+        for rule in invalid_rules {
+            let result = RuleParser::validate_rule(rule);
+            assert!(result.is_err(), "Expected rule to be invalid: {}", rule);
+        }
     }
 }

@@ -61,7 +61,7 @@ pub fn validate_tag(line: &str) -> Result<(), RulesError> {
     Ok(())
 }
 
-fn get_name_from_tag(parts: &Vec<&str>) -> String {
+fn get_name_from_tag(parts: &Vec<&str>) -> Result<String, RulesError> {
     normalise(parts[0])
 }
 
@@ -73,7 +73,7 @@ pub fn get_name_and_values_from_tag(line: &str) -> Result<(String, Vec<String>),
     validate_tag(line)?;
     let parts: Vec<&str> = line.trim().split(':').collect();
 
-    let name: String = get_name_from_tag(&parts);
+    let name: String = get_name_from_tag(&parts)?;
     let values: Vec<String> = get_values_from_tag(&parts);
     Ok((name, values))
 }
