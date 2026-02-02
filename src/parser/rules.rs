@@ -173,6 +173,17 @@ impl RuleParser {
         Ok(mapped_token_list)
     }
 
+    fn check_rule_syntax(tokens: &MappedRuleTokens) -> bool {
+        for (i, value) in tokens.into_iter().enumerate() {
+            // TODO
+            if token[i] == "(" {
+                return true;
+            }
+            return false;
+        }
+        return false;
+    }
+
     fn validate_rule(line: &str) -> Result<(), RulesError> {
         if file::line_blank_or_comment(line) {
             return Ok(());
@@ -180,6 +191,8 @@ impl RuleParser {
 
         let line = string::normalise(line);
         let tokens: MappedRuleTokens = Self::map_rule_tokens(&line)?;
+
+        let is_valid_rule: bool = Self::check_rule_syntax(&tokens);
 
         // NEXT TASK: Ensure that parts conform to correct syntactical structure
 
