@@ -1,7 +1,7 @@
 // Parser for .rules files
 use crate::err::RulesError;
 use crate::parser::types::{MappedRuleTokens, Rule, TokenType};
-use crate::types::{self, SubRule, TagName};
+use crate::types::{self, SubRule};
 use crate::utils::file;
 use crate::utils::string;
 
@@ -15,7 +15,7 @@ const RHS_CHARS: &[char] = &['=', '!', ',', ')'];
 const LHS_CHARS: &[char] = &['&', '|', '('];
 
 pub struct RuleParser {
-    m_tags: HashMap<types::TagName, types::TagValues>,
+    m_mapped_tags: HashMap<types::TagName, types::TagValues>,
 }
 
 impl RuleParser {
@@ -217,7 +217,49 @@ impl RuleParser {
         }
     }
 
-    fn validate_rule(line: &str) -> Result<(), RulesError> {
+    fn check_valid_tags(&self, tokens: &MappedRuleTokens) -> Result<(), RulesError> {
+        let mut last_tag_name: Option<String> = None;
+
+        for (key, token_type) in tokens.iter() {
+            if *token_type == TokenType::TagName {
+                if key == "(" || key == ")" {
+                    continue;
+                }
+
+                // Check if tag name exists
+                if !self.m_mapped_tags.contains_key(key) {
+                    return Err(RulesError::RuleParseError(
+                        format!("Rule contains invalid TagName: {}", key)
+                    ));
+                }
+
+                // Store this tag name for validating the next tag value
+                last_tag_name = Some(key.clone());
+            } else if *token_type == TokenType::TagValue {
+                let tag_name = last_tag_name.as_ref().ok_or_else(|| {
+                    RulesError::RuleParseError(
+                        format!("TagValue '{}' has no associated TagName", key)
+                    )
+                })?;
+
+                let valid_values = self.m_mapped_tags.get(tag_name).ok_or_else(|| {
+                    RulesError::RuleParseError(
+                        format!("No TagName '{}' found for TagValue '{}'", tag_name, key)
+                    )
+                })?;
+
+                if !valid_values.contains(key) {
+                    return Err(RulesError::RuleParseError(
+                        format!("Rule contains invalid TagValue: '{}' is not a valid value for TagName '{}'", key, tag_name)
+                    ));
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    fn validate_rule(&self, line: &str) -> Result<(), RulesError> {
         if file::line_blank_or_comment(line) {
             return Ok(());
         }
@@ -226,16 +268,17 @@ impl RuleParser {
         let tokens: MappedRuleTokens = Self::map_rule_tokens(&line)?;
 
         Self::check_rule_syntax(&tokens)?;
+        Self::check_valid_tags(&self, &tokens)?;
         Ok(())
     }
 
-    fn string_to_rule(rule_str: &str) -> Result<Rule, RulesError> {
+    fn string_to_rule(&self, rule_str: &str) -> Result<Rule, RulesError> {
         // TODO: Parse string into AST representation
-        Self::validate_rule(rule_str)?;
+        Self::validate_rule(&self, rule_str)?;
         unimplemented!()
     }
 
-    fn rule_to_dnf_subrule(rule: Rule) -> Result<SubRule, RulesError> {
+    fn rule_to_dnf_subrule(&self, rule: Rule) -> Result<SubRule, RulesError> {
         // TODO: Convert AST to Disjunctive Normal Form
         unimplemented!()
     }
@@ -243,9 +286,11 @@ impl RuleParser {
     /// Main entry point for parsing rule files.
     /// Converts all .rules files into Disjunctive Normal Form (DNF) subrules.
     pub fn parse_rules(
-        tags: HashMap<types::TagName, types::TagValues>,
+        mapped_tags: HashMap<types::TagName, types::TagValues>,
     ) -> Result<Vec<SubRule>, RulesError> {
-        let RuleParser { m_tags: tags };
+        let parser = RuleParser {
+            m_mapped_tags: mapped_tags,
+        };
 
         let mut dnf_subrules: Vec<SubRule> = Vec::new();
         let all_files: Vec<String> = file::read_files_in_dir("config/*.rules")?;
@@ -257,15 +302,14 @@ impl RuleParser {
                 }
 
                 // Parse string to AST, then convert to DNF representation
-                let rule = Self::string_to_rule(line)?;
-                let subrule = Self::rule_to_dnf_subrule(rule)?;
+                let rule = parser.string_to_rule(line)?;
+                let subrule = parser.rule_to_dnf_subrule(rule)?;
 
                 dnf_subrules.push(subrule);
             }
         }
 
-        // TODO
-        Ok(Vec::new())
+        Ok(dnf_subrules)
     }
 }
 
@@ -785,11 +829,131 @@ mod tests {
         }
     }
 
+    // Helper function to create test tags
+    fn create_test_tags() -> HashMap<String, Vec<String>> {
+        let mut tags = HashMap::new();
+        tags.insert("colour".to_string(), vec!["red".to_string(), "blue".to_string(), "green".to_string()]);
+        tags.insert("size".to_string(), vec!["small".to_string(), "medium".to_string(), "large".to_string()]);
+        tags.insert("shape".to_string(), vec!["circle".to_string(), "square".to_string()]);
+        tags
+    }
+
+    // Tests for check_valid_tags
+    #[test]
+    fn test_check_valid_tags_all_valid() {
+        let parser = RuleParser {
+            m_mapped_tags: create_test_tags(),
+        };
+
+        let tokens = vec![
+            ("colour".to_string(), TokenType::TagName),
+            ("=".to_string(), TokenType::ComparisonOp),
+            ("red".to_string(), TokenType::TagValue),
+            ("&".to_string(), TokenType::LogicalOp),
+            ("size".to_string(), TokenType::TagName),
+            ("=".to_string(), TokenType::ComparisonOp),
+            ("large".to_string(), TokenType::TagValue),
+        ];
+
+        let result = parser.check_valid_tags(&tokens);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_check_valid_tags_invalid_tag_name() {
+        let parser = RuleParser {
+            m_mapped_tags: create_test_tags(),
+        };
+
+        let tokens = vec![
+            ("invalid_tag".to_string(), TokenType::TagName),
+            ("=".to_string(), TokenType::ComparisonOp),
+            ("red".to_string(), TokenType::TagValue),
+        ];
+
+        let result = parser.check_valid_tags(&tokens);
+        assert!(result.is_err());
+        if let Err(RulesError::RuleParseError(msg)) = result {
+            assert!(msg.contains("invalid TagName"));
+            assert!(msg.contains("invalid_tag"));
+        } else {
+            panic!("Expected RuleParseError about invalid tag name");
+        }
+    }
+
+    #[test]
+    fn test_check_valid_tags_invalid_tag_value() {
+        let parser = RuleParser {
+            m_mapped_tags: create_test_tags(),
+        };
+
+        let tokens = vec![
+            ("colour".to_string(), TokenType::TagName),
+            ("=".to_string(), TokenType::ComparisonOp),
+            ("purple".to_string(), TokenType::TagValue),
+        ];
+
+        let result = parser.check_valid_tags(&tokens);
+        assert!(result.is_err());
+        if let Err(RulesError::RuleParseError(msg)) = result {
+            assert!(msg.contains("invalid TagValue"));
+            assert!(msg.contains("purple"));
+        } else {
+            panic!("Expected RuleParseError about invalid tag value");
+        }
+    }
+
+    #[test]
+    fn test_check_valid_tags_with_parentheses() {
+        let parser = RuleParser {
+            m_mapped_tags: create_test_tags(),
+        };
+
+        let tokens = vec![
+            ("(".to_string(), TokenType::TagName),
+            ("colour".to_string(), TokenType::TagName),
+            ("=".to_string(), TokenType::ComparisonOp),
+            ("blue".to_string(), TokenType::TagValue),
+            (")".to_string(), TokenType::LogicalOp),
+        ];
+
+        let result = parser.check_valid_tags(&tokens);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_check_valid_tags_multiple_conditions() {
+        let parser = RuleParser {
+            m_mapped_tags: create_test_tags(),
+        };
+
+        let tokens = vec![
+            ("colour".to_string(), TokenType::TagName),
+            ("=".to_string(), TokenType::ComparisonOp),
+            ("red".to_string(), TokenType::TagValue),
+            ("&".to_string(), TokenType::LogicalOp),
+            ("size".to_string(), TokenType::TagName),
+            ("!".to_string(), TokenType::ComparisonOp),
+            ("small".to_string(), TokenType::TagValue),
+            ("|".to_string(), TokenType::LogicalOp),
+            ("shape".to_string(), TokenType::TagName),
+            ("=".to_string(), TokenType::ComparisonOp),
+            ("circle".to_string(), TokenType::TagValue),
+        ];
+
+        let result = parser.check_valid_tags(&tokens);
+        assert!(result.is_ok());
+    }
+
     // Tests for validate_rule
     // Note: validate_rule expects rules to start with '-' (as they appear in config files)
     // and normalizes them by removing the first character
     #[test]
     fn test_validate_rule_valid() {
+        let parser = RuleParser {
+            m_mapped_tags: create_test_tags(),
+        };
+
         let valid_rules = vec![
             "-colour = red",
             "-colour = red & size = large",
@@ -802,13 +966,17 @@ mod tests {
         ];
 
         for rule in valid_rules {
-            let result = RuleParser::validate_rule(rule);
+            let result = parser.validate_rule(rule);
             assert!(result.is_ok(), "Expected rule to be valid: {}", rule);
         }
     }
 
     #[test]
     fn test_validate_rule_invalid() {
+        let parser = RuleParser {
+            m_mapped_tags: create_test_tags(),
+        };
+
         let invalid_rules = vec![
             // Missing dash at start
             "colour = red",
@@ -847,8 +1015,48 @@ mod tests {
         ];
 
         for rule in invalid_rules {
-            let result = RuleParser::validate_rule(rule);
+            let result = parser.validate_rule(rule);
             assert!(result.is_err(), "Expected rule to be invalid: {}", rule);
+        }
+    }
+
+    #[test]
+    fn test_validate_rule_invalid_tag_names() {
+        let parser = RuleParser {
+            m_mapped_tags: create_test_tags(),
+        };
+
+        let invalid_rules = vec![
+            "-invalid_tag = red",
+            "-colour = red & unknown = value",
+        ];
+
+        for rule in invalid_rules {
+            let result = parser.validate_rule(rule);
+            assert!(result.is_err(), "Expected rule to be invalid due to unknown tag: {}", rule);
+            if let Err(RulesError::RuleParseError(msg)) = result {
+                assert!(msg.contains("invalid TagName") || msg.contains("invalid TagValue"));
+            }
+        }
+    }
+
+    #[test]
+    fn test_validate_rule_invalid_tag_values() {
+        let parser = RuleParser {
+            m_mapped_tags: create_test_tags(),
+        };
+
+        let invalid_rules = vec![
+            "-colour = purple",
+            "-colour = red & size = huge",
+        ];
+
+        for rule in invalid_rules {
+            let result = parser.validate_rule(rule);
+            assert!(result.is_err(), "Expected rule to be invalid due to unknown value: {}", rule);
+            if let Err(RulesError::RuleParseError(msg)) = result {
+                assert!(msg.contains("invalid TagValue"));
+            }
         }
     }
 }
