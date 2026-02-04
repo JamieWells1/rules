@@ -1,11 +1,21 @@
 // Parser for .rules files
 use crate::err::RulesError;
-use crate::parser::types::{MappedRuleTokens, Rule, TokenType, TokenDepth};
+use crate::parser::types::{MappedRuleTokens, Node, Rule, TokenDepth, TokenType};
 use crate::types::{self, SubRule};
 use crate::utils::file;
 use crate::utils::string;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::sync::LazyLock;
+
+static TOKEN_PRECEDENCE: LazyLock<HashMap<&str, i32>> = LazyLock::new(|| {
+    let mut m = HashMap::new();
+    m.insert("&", 0);
+    m.insert("|", 1);
+    m.insert("(", 2);
+    m.insert(")", 2);
+    m
+});
 
 // All valid operator characters in rule syntax
 const ALL_OP_CHARS: &[char] = &['(', ')', '=', '!', '&', '|', ','];
@@ -157,7 +167,11 @@ impl RuleParser {
         mapped_token_list.push((tag_name.to_string(), TokenType::TagName, paren_depth));
 
         parsed_tokens.push(comparison_op.to_string());
-        mapped_token_list.push((comparison_op.to_string(), TokenType::ComparisonOp, paren_depth));
+        mapped_token_list.push((
+            comparison_op.to_string(),
+            TokenType::ComparisonOp,
+            paren_depth,
+        ));
     }
 
     fn map_rule_tokens(rule: &str) -> Result<MappedRuleTokens, RulesError> {
@@ -255,8 +269,7 @@ impl RuleParser {
 
         // Flush final word if present
         if !current_word.is_empty() {
-            let expected_token_type =
-                Self::get_expected_token_type(&parsed_tokens, paren_depth)?;
+            let expected_token_type = Self::get_expected_token_type(&parsed_tokens, paren_depth)?;
             let token = current_word.trim().to_string();
             parsed_tokens.push(token.clone());
             mapped_token_list.push((token, expected_token_type, paren_depth));
@@ -362,19 +375,41 @@ impl RuleParser {
     fn string_to_rule(&self, rule_str: &str) -> Result<Rule, RulesError> {
         Self::validate_rule(&self, rule_str)?;
 
-        let mut paren_depth: i32 = 0;
+        // HashSet containing LHS & RHS of operator, including the operator itself
+        // e.g. ("=", "colour", "red")
+        let mut tree: Vec<HashSet<&str>> = Vec::new();
+
         let mapped_tokens: Vec<(String, TokenType, TokenDepth)> = Self::map_rule_tokens(rule_str)?;
+        // Vector of tokens in mapped_tokens
+        let tokens_as_str: Vec<String> = mapped_tokens
+            .iter()
+            .map(|(token, _, _)| token.clone())
+            .collect();
 
-        // Rule traversal
-        for (token, token_type, token_depth) in mapped_tokens {
-            if token == "(" {
-                paren_depth += 1;
+        let mut rules_to_convert: Vec<&str> = Vec::new();
+        rules_to_convert.push(rule_str);
+
+        while !rules_to_convert.is_empty() {
+            let mut lowest_precedence_op: Option<(&str, i32)> = None;
+
+            for (i, token) in tokens_as_str.iter().enumerate() {
+                let paren_depth: i32 = mapped_tokens[i].2;
+                if TOKEN_PRECEDENCE.contains_key(token.as_str()) && paren_depth == 0 {
+                    lowest_precedence_op = Some((token.as_str(), paren_depth));
+
+                    // TODO: Split rule
+                }
+                let current_precedence = TOKEN_PRECEDENCE.get(token.as_str()).unwrap();
+
+                // Found an operator that has a lower precedence than the current lowest
+                if lowest_precedence_op.is_none() {
+                    lowest_precedence_op = Some((token.as_str(), *current_precedence));
+                } else if let Some((_, lowest_prec)) = lowest_precedence_op {
+                    if current_precedence > &lowest_prec {
+                        lowest_precedence_op = Some((token.as_str(), *current_precedence));
+                    }
+                }
             }
-            else if token == ")" {
-                paren_depth -= 1;
-            }
-
-
         }
 
         unimplemented!()
@@ -420,8 +455,14 @@ mod tests {
     use super::*;
 
     // Find a token in the token list
-    fn find_token<'a>(tokens: &'a [(String, TokenType, TokenDepth)], token_str: &str) -> Option<&'a TokenType> {
-        tokens.iter().find(|(s, _, _)| s == token_str).map(|(_, t, _)| t)
+    fn find_token<'a>(
+        tokens: &'a [(String, TokenType, TokenDepth)],
+        token_str: &str,
+    ) -> Option<&'a TokenType> {
+        tokens
+            .iter()
+            .find(|(s, _, _)| s == token_str)
+            .map(|(_, t, _)| t)
     }
 
     // Count occurrences of a token
