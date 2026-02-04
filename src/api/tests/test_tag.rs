@@ -42,9 +42,9 @@ fn test_write_tag_creates_file() {
 }
 
 #[test]
-fn test_write_tag_normalizes_filename() {
-    let file_name_without_ext = "test_normalize";
-    let file_name_with_ext = "test_normalize.tags";
+fn test_write_tag_normalises_filename() {
+    let file_name_without_ext = "test_normalise";
+    let file_name_with_ext = "test_normalise.tags";
     setup_and_cleanup_test_file(file_name_with_ext);
 
     let result = write_with_base_dir(

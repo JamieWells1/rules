@@ -24,10 +24,8 @@ fn create_test_tags() -> HashMap<String, Vec<String>> {
 }
 
 fn setup_and_cleanup_test_file(file_name: &str) {
-    // Ensure test config directory exists
     let _ = fs::create_dir_all(TEST_CONFIG_DIR);
 
-    // Clean up any existing test file
     let path = format!("{}/{}", TEST_CONFIG_DIR, file_name);
     if Path::new(&path).exists() {
         let _ = fs::remove_file(&path);
@@ -56,9 +54,9 @@ fn test_write_rule_creates_file() {
 }
 
 #[test]
-fn test_write_rule_normalizes_filename() {
-    let file_name_without_ext = "test_normalize";
-    let file_name_with_ext = "test_normalize.rules";
+fn test_write_rule_normalises_filename() {
+    let file_name_without_ext = "test_normalise";
+    let file_name_with_ext = "test_normalise.rules";
     setup_and_cleanup_test_file(file_name_with_ext);
 
     let tags = create_test_tags();
@@ -82,11 +80,9 @@ fn test_write_rule_validates_rule() {
 
     let tags = create_test_tags();
 
-    // Invalid: missing dash
     let result = write_with_base_dir(file_name, "colour = red", tags.clone(), TEST_CONFIG_DIR);
     assert!(result.is_err());
 
-    // Invalid: unknown tag
     let result = write_with_base_dir(
         file_name,
         "-invalid_tag = value",
@@ -95,7 +91,6 @@ fn test_write_rule_validates_rule() {
     );
     assert!(result.is_err());
 
-    // Invalid: unknown value
     let result = write_with_base_dir(file_name, "-colour = purple", tags.clone(), TEST_CONFIG_DIR);
     assert!(result.is_err());
 
@@ -109,13 +104,10 @@ fn test_write_rule_appends_to_existing_file() {
 
     let tags = create_test_tags();
 
-    // Write first rule
     write_with_base_dir(file_name, "-colour = red", tags.clone(), TEST_CONFIG_DIR).unwrap();
 
-    // Write second rule
     write_with_base_dir(file_name, "-size = large", tags.clone(), TEST_CONFIG_DIR).unwrap();
 
-    // Read file and check both rules exist
     let content = fs::read_to_string(&format!("{}/{}", TEST_CONFIG_DIR, file_name)).unwrap();
     assert!(content.contains("-colour = red"));
     assert!(content.contains("-size = large"));
@@ -130,10 +122,8 @@ fn test_write_rule_prevents_duplicates() {
 
     let tags = create_test_tags();
 
-    // Write first rule
     write_with_base_dir(file_name, "-colour = red", tags.clone(), TEST_CONFIG_DIR).unwrap();
 
-    // Try to write same rule again
     let result = write_with_base_dir(file_name, "-colour = red", tags.clone(), TEST_CONFIG_DIR);
     assert!(result.is_err());
     if let Err(RulesError::RuleParseError(msg)) = result {
@@ -149,7 +139,6 @@ fn test_write_rule_prevents_duplicates() {
 fn test_write_rule_creates_config_dir() {
     let test_dir = "src/api/tests/test_config_creation";
 
-    // Remove test directory if it exists
     if Path::new(test_dir).exists() {
         let _ = fs::remove_dir_all(test_dir);
     }
@@ -161,7 +150,6 @@ fn test_write_rule_creates_config_dir() {
     assert!(result.is_ok());
     assert!(Path::new(test_dir).exists());
 
-    // Clean up test directory
     let _ = fs::remove_dir_all(test_dir);
 }
 
@@ -193,7 +181,6 @@ fn test_write_rule_comma_syntax() {
 
     let tags = create_test_tags();
 
-    // Valid comma rules - comma is shorthand for OR within same field
     let valid_comma_rules = vec![
         "-colour = red, blue",
         "-colour = red, blue, green",
@@ -218,17 +205,20 @@ fn test_write_rule_invalid_comma_syntax() {
 
     let tags = create_test_tags();
 
-    // Invalid comma usage - comma must follow a tag value
     let invalid_comma_rules = vec![
-        "-colour =, red",           // Comma after operator
-        "-,colour = red",           // Comma at start
-        "-colour = red,",           // Comma at end
-        "-(colour = red,) & size = large", // Comma before closing paren
+        "-colour =, red",
+        "-,colour = red",
+        "-colour = red,",
+        "-(colour = red,) & size = large",
     ];
 
     for rule in invalid_comma_rules {
         let result = write_with_base_dir(file_name, rule, tags.clone(), TEST_CONFIG_DIR);
-        assert!(result.is_err(), "Should reject invalid comma rule: {}", rule);
+        assert!(
+            result.is_err(),
+            "Should reject invalid comma rule: {}",
+            rule
+        );
     }
 
     cleanup_test_file(file_name);
@@ -241,11 +231,10 @@ fn test_write_rule_comma_with_different_operators() {
 
     let tags = create_test_tags();
 
-    // Test comma with both = and ! operators
     let rules_with_different_ops = vec![
-        "-colour = red, blue",      // Equals with comma
-        "-colour ! red, blue",      // Not equals with comma
-        "-size ! small, medium",    // Not equals with multiple values
+        "-colour = red, blue",
+        "-colour ! red, blue",
+        "-size ! small, medium",
     ];
 
     for rule in rules_with_different_ops {

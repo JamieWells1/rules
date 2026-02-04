@@ -5,11 +5,6 @@ use std::fs;
 
 use glob::glob;
 
-pub fn read_file(path: &str) -> Result<String, RulesError> {
-    let file_content = fs::read_to_string(path)?;
-    Ok(file_content)
-}
-
 pub fn read_files_in_dir(pattern: &str) -> Result<Vec<String>, RulesError> {
     let mut contents = Vec::new();
 

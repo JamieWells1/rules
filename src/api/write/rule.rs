@@ -5,8 +5,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
-/// Normalizes a filename to ensure it has the .rules extension
-fn normalize_filename(file_name: &str) -> String {
+fn normalise_filename(file_name: &str) -> String {
     if file_name.ends_with(".rules") {
         file_name.to_string()
     } else {
@@ -14,7 +13,6 @@ fn normalize_filename(file_name: &str) -> String {
     }
 }
 
-/// Ensures the config directory exists
 fn ensure_config_dir(base_dir: &str) -> Result<(), RulesError> {
     let config_dir = Path::new(base_dir);
     if !config_dir.exists() {
@@ -23,18 +21,6 @@ fn ensure_config_dir(base_dir: &str) -> Result<(), RulesError> {
     Ok(())
 }
 
-/// Writes a rule to a .rules file
-///
-/// # Arguments
-/// * `file_name` - Name of the file (with or without .rules extension)
-/// * `rule` - The rule string to write (should start with '-')
-/// * `tags` - HashMap of valid tags for validation
-///
-/// # Examples
-/// ```ignore
-/// write("my_rules", "-colour = red & size = large", tags)?;
-/// write("my_rules.rules", "-colour = blue", tags)?;
-/// ```
 pub fn write(
     file_name: &str,
     rule: &str,
@@ -43,8 +29,6 @@ pub fn write(
     write_with_base_dir(file_name, rule, tags, "config")
 }
 
-/// Internal function for writing rules with a custom base directory.
-/// Used primarily for testing to avoid touching production config files.
 #[cfg(test)]
 pub(crate) fn write_with_base_dir(
     file_name: &str,
@@ -57,7 +41,6 @@ pub(crate) fn write_with_base_dir(
     write_internal(file_name, rule, tags, base)
 }
 
-/// Non-test version that's always available for internal use
 #[cfg(not(test))]
 pub(crate) fn write_with_base_dir(
     file_name: &str,
@@ -68,21 +51,18 @@ pub(crate) fn write_with_base_dir(
     write_internal(file_name, rule, tags, base_dir)
 }
 
-/// Actual implementation shared by both public and internal functions
 fn write_internal(
     file_name: &str,
     rule: &str,
     tags: HashMap<TagName, TagValues>,
     base_dir: &str,
 ) -> Result<(), RulesError> {
-    // Normalize filename
-    let normalised_name = normalize_filename(file_name);
+    // normalise filename
+    let normalised_name = normalise_filename(file_name);
     let full_path = format!("{}/{}", base_dir, normalised_name);
 
-    // Ensure config directory exists
     ensure_config_dir(base_dir)?;
 
-    // Validate the rule using RuleParser
     let parser = RuleParser::new(tags);
     parser.validate_rule(rule)?;
 
@@ -96,7 +76,6 @@ fn write_internal(
         Vec::new()
     };
 
-    // Check if the exact rule already exists
     let rule_trimmed = rule.trim();
     if lines
         .iter()
@@ -107,10 +86,8 @@ fn write_internal(
         ));
     }
 
-    // Add the new rule
     lines.push(rule_trimmed.to_string());
 
-    // Write back to file
     fs::write(&full_path, lines.join("\n"))?;
 
     Ok(())

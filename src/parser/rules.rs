@@ -19,19 +19,16 @@ pub struct RuleParser {
 }
 
 impl RuleParser {
-    /// Creates a new RuleParser with the given tags
     pub fn new(tags: HashMap<types::TagName, types::TagValues>) -> Self {
         RuleParser {
             m_mapped_tags: tags,
         }
     }
 
-    /// Public API to validate a rule
     pub fn validate_rule(&self, rule: &str) -> Result<(), RulesError> {
         self.validate_rule_internal(rule)
     }
 
-    /// Internal validation implementation
     fn validate_rule_internal(&self, line: &str) -> Result<(), RulesError> {
         if file::line_blank_or_comment(line) {
             return Ok(());
@@ -39,14 +36,13 @@ impl RuleParser {
 
         let original_line = line.to_string();
 
-        let line = string::normalise(line)
-            .map_err(|e| Self::add_error_context(e, &original_line))?;
+        let line =
+            string::normalise(line).map_err(|e| Self::add_error_context(e, &original_line))?;
 
-        let tokens: MappedRuleTokens = Self::map_rule_tokens(&line)
-            .map_err(|e| Self::add_error_context(e, &original_line))?;
+        let tokens: MappedRuleTokens =
+            Self::map_rule_tokens(&line).map_err(|e| Self::add_error_context(e, &original_line))?;
 
-        Self::check_rule_syntax(&tokens)
-            .map_err(|e| Self::add_error_context(e, &original_line))?;
+        Self::check_rule_syntax(&tokens).map_err(|e| Self::add_error_context(e, &original_line))?;
 
         self.check_valid_tags(&tokens)
             .map_err(|e| Self::add_error_context(e, &original_line))?;
@@ -63,9 +59,6 @@ impl RuleParser {
         }
     }
 
-    /// Infers the expected type of the next token based on parsing context.
-    /// Uses the last token (and sometimes second-to-last) to determine what should come next.
-    /// Example: after '(' we expect TagName, after '=' we expect TagValue
     fn get_expected_token_type(
         parsed_tokens: &Vec<String>,
         parenthesis_depth: i32,
@@ -324,20 +317,18 @@ impl RuleParser {
         let mut last_tag_name: Option<String> = None;
 
         for (key, token_type) in tokens.iter() {
+            let key = String::from(key).to_lowercase();
             if *token_type == TokenType::TagName {
                 if key == "(" || key == ")" {
                     continue;
                 }
 
-                // Check if tag name exists
-                if !self.m_mapped_tags.contains_key(key) {
+                if !self.m_mapped_tags.contains_key(&key) {
                     return Err(RulesError::RuleParseError(format!(
                         "Rule contains invalid TagName: {}",
                         key
                     )));
                 }
-
-                // Store this tag name for validating the next tag value
                 last_tag_name = Some(key.clone());
             } else if *token_type == TokenType::TagValue {
                 let tag_name = last_tag_name.as_ref().ok_or_else(|| {
@@ -354,7 +345,7 @@ impl RuleParser {
                     ))
                 })?;
 
-                if !valid_values.contains(key) {
+                if !valid_values.contains(&key) {
                     return Err(RulesError::RuleParseError(format!(
                         "Rule contains invalid TagValue: '{}' is not a valid value for TagName '{}'",
                         key, tag_name
@@ -1054,7 +1045,7 @@ mod tests {
 
     // Tests for validate_rule
     // Note: validate_rule expects rules to start with '-' (as they appear in config files)
-    // and normalizes them by removing the first character
+    // and normalises them by removing the first character
     #[test]
     fn test_validate_rule_valid() {
         let parser = RuleParser {

@@ -1,6 +1,8 @@
 use crate::err::RulesError;
 use crate::parser::rules::RuleParser;
+use crate::parser::tags;
 use crate::types::{TagName, TagValues};
+use crate::utils::file;
 use std::collections::HashMap;
 
 /// Main API for the rules engine.
@@ -63,10 +65,33 @@ impl Rules {
     /// rules.load_tags()?;
     /// ```
     pub fn load_tags(&mut self) -> Result<(), RulesError> {
-        // TODO: Implement loading all .tags files from config_dir
-        // For now, you'd need to add a function to parse .tags files
-        // This would read all .tags files and populate self.tags
-        todo!("Implement tag loading from directory")
+        let pattern = format!("{}/*.tags", self.config_dir);
+        let all_files = file::read_files_in_dir(&pattern)?;
+
+        // Clear existing tags
+        self.tags.clear();
+
+        for file_content in all_files.iter() {
+            for line in file_content.lines() {
+                if file::line_blank_or_comment(line) {
+                    continue;
+                }
+
+                let (name, values) = tags::get_name_and_values_from_tag(line)?;
+
+                // Normalize to lowercase for consistent lookup
+                let name = name.to_lowercase();
+                let values: Vec<String> = values.iter().map(|v| v.to_lowercase()).collect();
+
+                // Merge values if tag already exists
+                self.tags
+                    .entry(name)
+                    .and_modify(|existing_values| existing_values.extend(values.clone()))
+                    .or_insert(values);
+            }
+        }
+
+        Ok(())
     }
 
     /// Writes a tag to a .tags file.
@@ -84,9 +109,10 @@ impl Rules {
         &mut self,
         file_name: &str,
         tag_name: impl Into<String>,
-        tag_values: Vec<String>,
+        tag_values: Vec<impl Into<String>>,
     ) -> Result<(), RulesError> {
         let tag_name = tag_name.into();
+        let tag_values: Vec<String> = tag_values.into_iter().map(|v| v.into()).collect();
 
         // Write to file
         crate::api::write::tag::write_with_base_dir(
@@ -96,8 +122,15 @@ impl Rules {
             &self.config_dir,
         )?;
 
-        // Update cached tags
-        self.tags.insert(tag_name, tag_values);
+        // Normalize to lowercase for consistent lookup in cache
+        let tag_name_lower = tag_name.to_lowercase();
+        let tag_values_lower: Vec<String> = tag_values.iter().map(|v| v.to_lowercase()).collect();
+
+        // Update cached tags (append if exists)
+        self.tags
+            .entry(tag_name_lower)
+            .and_modify(|existing| existing.extend(tag_values_lower.clone()))
+            .or_insert(tag_values_lower);
 
         Ok(())
     }
@@ -170,37 +203,25 @@ impl Rules {
         parser.validate_rule(rule)
     }
 
-    /// Evaluates rules against an object.
+    /// Evaluates rules against objects.
     ///
-    /// # Arguments
-    /// * `rules_file` - Path to the .rules file
-    /// * `objects_file` - Path to the .yaml file containing objects
-    ///
-    /// # Examples
-    /// ```ignore
-    /// rules.evaluate("my_rules.rules", "objects.yaml")?;
-    /// ```
-    pub fn evaluate(&self, rules_file: &str, objects_file: &str) -> Result<(), RulesError> {
-        // Construct full paths
-        let rules_path = format!("{}/{}", self.config_dir, rules_file);
-        let objects_path = format!("{}/{}", self.config_dir, objects_file);
-
-        crate::api::entry::evaluate(&rules_path, &objects_path)
-    }
-
-    /// Gets a reference to the current tag definitions.
+    /// Note: Currently uses the default orchestrator which reads from the config directory.
+    /// Parameters will be supported in a future update.
     ///
     /// # Examples
     /// ```ignore
-    /// let tags = rules.tags();
-    /// println!("Available tags: {:?}", tags.keys());
+    /// rules.evaluate()?;
     /// ```
-    pub fn tags(&self) -> &HashMap<TagName, TagValues> {
-        &self.tags
+    pub fn evaluate(&self) -> Result<(), RulesError> {
+        crate::api::entry::evaluate()
     }
 
-    /// Gets the config directory path.
-    pub fn config_dir(&self) -> &str {
-        &self.config_dir
+    /// Debug method to print loaded tags
+    #[cfg(test)]
+    pub fn debug_tags(&self) {
+        println!("Loaded tags:");
+        for (name, values) in &self.tags {
+            println!("  '{}' -> {:?}", name, values);
+        }
     }
 }

@@ -3,7 +3,7 @@ use crate::parser::tags;
 use std::fs;
 use std::path::Path;
 
-fn normalize_filename(file_name: &str) -> String {
+fn normalise_filename(file_name: &str) -> String {
     if file_name.ends_with(".tags") {
         file_name.to_string()
     } else {
@@ -19,24 +19,10 @@ fn ensure_config_dir(base_dir: &str) -> Result<(), RulesError> {
     Ok(())
 }
 
-/// Writes a tag to a .tags file
-///
-/// # Arguments
-/// * `file_name` - Name of the file (with or without .tags extension)
-/// * `tag_name` - Name of the tag (without the leading '-')
-/// * `tag_values` - Vector of values for the tag
-///
-/// # Examples
-/// ```ignore
-/// write("my_tags", "colour".to_string(), vec!["red".to_string(), "blue".to_string()])?;
-/// write("my_tags.tags", "size".to_string(), vec!["small".to_string()])?;
-/// ```
 pub fn write(file_name: &str, tag_name: String, tag_values: Vec<String>) -> Result<(), RulesError> {
     write_with_base_dir(file_name, tag_name, tag_values, "config")
 }
 
-/// Internal function for writing tags with a custom base directory.
-/// Used primarily for testing to avoid touching production config files.
 #[cfg(test)]
 pub(crate) fn write_with_base_dir(
     file_name: &str,
@@ -47,7 +33,6 @@ pub(crate) fn write_with_base_dir(
     write_internal(file_name, tag_name, tag_values, base_dir)
 }
 
-/// Non-test version that's always available for internal use
 #[cfg(not(test))]
 pub(crate) fn write_with_base_dir(
     file_name: &str,
@@ -58,7 +43,6 @@ pub(crate) fn write_with_base_dir(
     write_internal(file_name, tag_name, tag_values, base_dir)
 }
 
-/// Actual implementation shared by both public and internal functions
 fn write_internal(
     file_name: &str,
     tag_name: String,
@@ -92,7 +76,7 @@ fn write_internal(
         }
     }
 
-    let normalised_name = normalize_filename(file_name);
+    let normalised_name = normalise_filename(file_name);
     let full_path = format!("{}/{}", base_dir, normalised_name);
 
     ensure_config_dir(base_dir)?;
@@ -107,7 +91,7 @@ fn write_internal(
     };
 
     let mut tag_exists = false;
-    let tag_name_trimmed = tag_name.trim();
+    let tag_name_trimmed = tag_name.trim().to_lowercase();
 
     for line in &mut lines {
         if line.trim().starts_with('#') || line.trim().is_empty() {
@@ -123,7 +107,6 @@ fn write_internal(
                 }
             }
             Err(_) => {
-                // Skip malformed lines
                 continue;
             }
         }
