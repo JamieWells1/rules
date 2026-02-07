@@ -10,8 +10,8 @@ use std::sync::LazyLock;
 
 static TOKEN_PRECEDENCE: LazyLock<HashMap<&str, i32>> = LazyLock::new(|| {
     let mut m = HashMap::new();
-    m.insert("&", 0);
-    m.insert("|", 1);
+    m.insert("|", 0);
+    m.insert("&", 1);
     m.insert("=", 2);
     m.insert("!", 2);
     m
@@ -806,6 +806,188 @@ mod tests {
         assert_eq!(find_token(&mapped, "size"), Some(&TokenType::TagName));
         assert_eq!(find_token(&mapped, "large"), Some(&TokenType::TagValue));
         assert_eq!(count_token(&mapped, "="), 2);
+    }
+
+    // Tests for contains_logical_op
+    #[test]
+    fn test_contains_logical_op_with_and() {
+        let tokens = vec!["colour".to_string(), "=".to_string(), "red".to_string(), "&".to_string()];
+        assert!(RuleParser::contains_logical_op(&tokens));
+    }
+
+    #[test]
+    fn test_contains_logical_op_with_or() {
+        let tokens = vec!["colour".to_string(), "=".to_string(), "red".to_string(), "|".to_string()];
+        assert!(RuleParser::contains_logical_op(&tokens));
+    }
+
+    #[test]
+    fn test_contains_logical_op_without_logical_ops() {
+        let tokens = vec!["colour".to_string(), "=".to_string(), "red".to_string()];
+        assert!(!RuleParser::contains_logical_op(&tokens));
+    }
+
+    // Tests for create_leaf_node
+    #[test]
+    fn test_create_leaf_node_equals() {
+        let tokens = vec!["colour".to_string(), "=".to_string(), "red".to_string()];
+        let result = RuleParser::create_leaf_node(tokens);
+
+        assert!(result.is_ok());
+        let node = result.unwrap();
+        assert_eq!(node.token, crate::parser::types::Token::Equals);
+        assert!(node.left.is_none());
+        assert!(node.right.is_none());
+    }
+
+    #[test]
+    fn test_create_leaf_node_not_equals() {
+        let tokens = vec!["colour".to_string(), "!".to_string(), "red".to_string()];
+        let result = RuleParser::create_leaf_node(tokens);
+
+        assert!(result.is_ok());
+        let node = result.unwrap();
+        assert_eq!(node.token, crate::parser::types::Token::NotEquals);
+        assert!(node.left.is_none());
+        assert!(node.right.is_none());
+    }
+
+    #[test]
+    fn test_create_leaf_node_invalid_length() {
+        let tokens = vec!["colour".to_string(), "=".to_string()];
+        let result = RuleParser::create_leaf_node(tokens);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_create_leaf_node_invalid_operator() {
+        let tokens = vec!["colour".to_string(), "&".to_string(), "red".to_string()];
+        let result = RuleParser::create_leaf_node(tokens);
+        assert!(result.is_err());
+    }
+
+    // Tests for find_lowest_prec_op_index
+    #[test]
+    fn test_find_lowest_prec_op_index_single_and() {
+        let tokens = vec![
+            "colour".to_string(),
+            "=".to_string(),
+            "red".to_string(),
+            "&".to_string(),
+            "size".to_string(),
+            "=".to_string(),
+            "large".to_string(),
+        ];
+        let index = RuleParser::find_lowest_prec_op_index(&tokens);
+        assert_eq!(index, 3); // The "&" is at index 3
+    }
+
+    #[test]
+    fn test_find_lowest_prec_op_index_and_before_or() {
+        let tokens = vec![
+            "colour".to_string(),
+            "=".to_string(),
+            "red".to_string(),
+            "&".to_string(),
+            "size".to_string(),
+            "=".to_string(),
+            "large".to_string(),
+            "|".to_string(),
+            "shape".to_string(),
+            "=".to_string(),
+            "circle".to_string(),
+        ];
+        let index = RuleParser::find_lowest_prec_op_index(&tokens);
+        // "&" has precedence 0, "|" has precedence 1, so "|" is lower precedence
+        assert_eq!(index, 7);
+    }
+
+    #[test]
+    fn test_find_lowest_prec_op_index_nested_parens() {
+        let tokens = vec![
+            "(".to_string(),
+            "colour".to_string(),
+            "=".to_string(),
+            "red".to_string(),
+            ")".to_string(),
+            "&".to_string(),
+            "size".to_string(),
+            "=".to_string(),
+            "large".to_string(),
+        ];
+        let index = RuleParser::find_lowest_prec_op_index(&tokens);
+        // The "&" is at depth 0, while operators inside parens are at depth 1
+        assert_eq!(index, 5); // The "&" is at index 5
+    }
+
+    // Tests for build_ast
+    #[test]
+    fn test_build_ast_simple_leaf() {
+        let tokens = vec!["colour".to_string(), "=".to_string(), "red".to_string()];
+        let result = RuleParser::build_ast(tokens);
+
+        assert!(result.is_ok());
+        let node = result.unwrap();
+        assert_eq!(node.token, crate::parser::types::Token::Equals);
+        assert!(node.left.is_none());
+        assert!(node.right.is_none());
+    }
+
+    #[test]
+    fn test_build_ast_with_and() {
+        let tokens = vec![
+            "colour".to_string(),
+            "=".to_string(),
+            "red".to_string(),
+            "&".to_string(),
+            "size".to_string(),
+            "=".to_string(),
+            "large".to_string(),
+        ];
+        let result = RuleParser::build_ast(tokens);
+
+        assert!(result.is_ok());
+        let node = result.unwrap();
+        assert_eq!(node.token, crate::parser::types::Token::And);
+        assert!(node.left.is_some());
+        assert!(node.right.is_some());
+    }
+
+    #[test]
+    fn test_build_ast_with_or() {
+        let tokens = vec![
+            "colour".to_string(),
+            "=".to_string(),
+            "red".to_string(),
+            "|".to_string(),
+            "colour".to_string(),
+            "=".to_string(),
+            "blue".to_string(),
+        ];
+        let result = RuleParser::build_ast(tokens);
+
+        assert!(result.is_ok());
+        let node = result.unwrap();
+        assert_eq!(node.token, crate::parser::types::Token::Or);
+        assert!(node.left.is_some());
+        assert!(node.right.is_some());
+    }
+
+    #[test]
+    fn test_build_ast_strips_outer_parens() {
+        let tokens = vec![
+            "(".to_string(),
+            "colour".to_string(),
+            "=".to_string(),
+            "red".to_string(),
+            ")".to_string(),
+        ];
+        let result = RuleParser::build_ast(tokens);
+
+        assert!(result.is_ok());
+        let node = result.unwrap();
+        // Should strip parens and create a leaf node
+        assert_eq!(node.token, crate::parser::types::Token::Equals);
     }
 
     // Tests for check_rule_syntax
