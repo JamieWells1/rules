@@ -1,11 +1,11 @@
 // Parser for .rules files
 use crate::err::RulesError;
-use crate::parser::types::{MappedRuleTokens, Node, Rule, TokenDepth, TokenType};
+use crate::parser::types::{MappedRuleTokens, Node, NodeStr, Rule, TokenDepth, TokenType};
 use crate::types::{self, SubRule};
 use crate::utils::file;
 use crate::utils::string;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, VecDeque};
 use std::sync::LazyLock;
 
 static TOKEN_PRECEDENCE: LazyLock<HashMap<&str, i32>> = LazyLock::new(|| {
@@ -152,30 +152,7 @@ impl RuleParser {
         }
     }
 
-    // Expands a comma operator into its equivalent OR expression
-    fn expand_comma_operator(
-        tag_name: &str,
-        comparison_op: &str,
-        parsed_tokens: &mut Vec<String>,
-        mapped_token_list: &mut MappedRuleTokens,
-        paren_depth: i32,
-    ) {
-        parsed_tokens.push("|".to_string());
-        mapped_token_list.push(("|".to_string(), TokenType::LogicalOp, paren_depth));
-
-        parsed_tokens.push(tag_name.to_string());
-        mapped_token_list.push((tag_name.to_string(), TokenType::TagName, paren_depth));
-
-        parsed_tokens.push(comparison_op.to_string());
-        mapped_token_list.push((
-            comparison_op.to_string(),
-            TokenType::ComparisonOp,
-            paren_depth,
-        ));
-    }
-
-    fn map_rule_tokens(rule: &str) -> Result<MappedRuleTokens, RulesError> {
-        let mut mapped_token_list: Vec<(String, TokenType, TokenDepth)> = Vec::new();
+    fn tokenise_rule(rule: &str) -> Result<Vec<String>, RulesError> {
         let mut parsed_tokens: Vec<String> = Vec::new();
         let mut current_word = String::new();
         let mut paren_depth = 0;
@@ -191,7 +168,6 @@ impl RuleParser {
                         Self::get_expected_token_type(&parsed_tokens, paren_depth)?;
                     let token = current_word.trim().to_string();
                     parsed_tokens.push(token.clone());
-                    mapped_token_list.push((token.clone(), expected_token_type, paren_depth));
 
                     if expected_token_type == TokenType::TagName {
                         last_tag_name = Some(token);
@@ -213,13 +189,9 @@ impl RuleParser {
                         )
                     })?;
 
-                    Self::expand_comma_operator(
-                        tag_name,
-                        comparison_op,
-                        &mut parsed_tokens,
-                        &mut mapped_token_list,
-                        paren_depth,
-                    );
+                    parsed_tokens.push("|".to_string());
+                    parsed_tokens.push(tag_name.to_string());
+                    parsed_tokens.push(comparison_op.to_string());
 
                     continue;
                 }
@@ -227,14 +199,12 @@ impl RuleParser {
                 let expected_token_type =
                     Self::get_expected_token_type(&parsed_tokens, paren_depth)?;
                 let token = c.to_string();
-                mapped_token_list.push((token.clone(), expected_token_type, paren_depth));
                 parsed_tokens.push(token.clone());
 
                 if expected_token_type == TokenType::ComparisonOp {
                     last_comparison_op = Some(token);
                 }
 
-                // Update parenthesis depth after processing token
                 if c == '(' {
                     paren_depth += 1;
                 } else if c == ')' {
@@ -246,15 +216,12 @@ impl RuleParser {
                     }
                 }
             } else if c == ' ' {
-                // Space acts as word boundary
                 if !current_word.is_empty() {
                     let expected_token_type =
                         Self::get_expected_token_type(&parsed_tokens, paren_depth)?;
                     let token = current_word.trim().to_string();
                     parsed_tokens.push(token.clone());
-                    mapped_token_list.push((token.clone(), expected_token_type, paren_depth));
 
-                    // Track tag names for comma expansion
                     if expected_token_type == TokenType::TagName {
                         last_tag_name = Some(token);
                     }
@@ -262,23 +229,44 @@ impl RuleParser {
                     current_word.clear();
                 }
             } else {
-                // Accumulate characters into current word
                 current_word.push(c);
             }
         }
 
-        // Flush final word if present
         if !current_word.is_empty() {
-            let expected_token_type = Self::get_expected_token_type(&parsed_tokens, paren_depth)?;
             let token = current_word.trim().to_string();
-            parsed_tokens.push(token.clone());
-            mapped_token_list.push((token, expected_token_type, paren_depth));
+            parsed_tokens.push(token);
         }
 
         if paren_depth != 0 {
             return Err(RulesError::RuleParseError(
                 "Unmatched opening parenthesis".to_string(),
             ));
+        }
+
+        Ok(parsed_tokens)
+    }
+
+    fn map_rule_tokens(rule: &str) -> Result<MappedRuleTokens, RulesError> {
+        // First tokenize the rule into strings
+        let tokens = Self::tokenise_rule(rule)?;
+
+        // Now add type and depth information to each token
+        let mut mapped_token_list: Vec<(String, TokenType, TokenDepth)> = Vec::new();
+        let mut parsed_tokens: Vec<String> = Vec::new();
+        let mut paren_depth = 0;
+
+        for token in tokens {
+            let expected_token_type = Self::get_expected_token_type(&parsed_tokens, paren_depth)?;
+            parsed_tokens.push(token.clone());
+            mapped_token_list.push((token.clone(), expected_token_type, paren_depth));
+
+            // Update parenthesis depth
+            if token == "(" {
+                paren_depth += 1;
+            } else if token == ")" {
+                paren_depth -= 1;
+            }
         }
 
         Ok(mapped_token_list)
@@ -372,47 +360,113 @@ impl RuleParser {
         Ok(())
     }
 
-    fn string_to_rule(&self, rule_str: &str) -> Result<Rule, RulesError> {
-        Self::validate_rule(&self, rule_str)?;
+    fn find_lowest_prec_op_index(rule: &str) -> usize {
+        let mut op_index: usize = 0;
+        let mapped_tokens: MappedRuleTokens = Self::map_rule_tokens(rule)?;
+        for (i, token) in mapped_tokens.iter().enumerate() {
+            continue;
+        }
+        0
+    }
 
-        // HashSet containing LHS & RHS of operator, including the operator itself
-        // e.g. ("=", "colour", "red")
-        let mut tree: Vec<HashSet<&str>> = Vec::new();
+    fn contains_logical_op(tokens: &[String]) -> bool {
+        tokens.iter().any(|t| t == "&" || t == "|")
+    }
 
-        let mapped_tokens: Vec<(String, TokenType, TokenDepth)> = Self::map_rule_tokens(rule_str)?;
-        // Vector of tokens in mapped_tokens
-        let tokens_as_str: Vec<String> = mapped_tokens
-            .iter()
-            .map(|(token, _, _)| token.clone())
-            .collect();
-
-        let mut rules_to_convert: Vec<&str> = Vec::new();
-        rules_to_convert.push(rule_str);
-
-        while !rules_to_convert.is_empty() {
-            let mut lowest_precedence_op: Option<(&str, i32)> = None;
-
-            for (i, token) in tokens_as_str.iter().enumerate() {
-                let paren_depth: i32 = mapped_tokens[i].2;
-                if TOKEN_PRECEDENCE.contains_key(token.as_str()) && paren_depth == 0 {
-                    lowest_precedence_op = Some((token.as_str(), paren_depth));
-
-                    // TODO: Split rule
-                }
-                let current_precedence = TOKEN_PRECEDENCE.get(token.as_str()).unwrap();
-
-                // Found an operator that has a lower precedence than the current lowest
-                if lowest_precedence_op.is_none() {
-                    lowest_precedence_op = Some((token.as_str(), *current_precedence));
-                } else if let Some((_, lowest_prec)) = lowest_precedence_op {
-                    if current_precedence > &lowest_prec {
-                        lowest_precedence_op = Some((token.as_str(), *current_precedence));
-                    }
-                }
-            }
+    fn create_leaf_node(tokens: Vec<String>) -> Result<Node, RulesError> {
+        if tokens.len() != 3 {
+            return Err(RulesError::RuleParseError(format!(
+                "Invalid leaf node: expected 3 tokens, got {}",
+                tokens.len()
+            )));
         }
 
-        unimplemented!()
+        // Middle token is comparator
+        let operator = &tokens[1];
+        let token = if operator == "=" {
+            crate::parser::types::Token::Equals
+        } else if operator == "!" {
+            crate::parser::types::Token::NotEquals
+        } else {
+            return Err(RulesError::RuleParseError(format!(
+                "Invalid comparison operator: {}",
+                operator
+            )));
+        };
+
+        Ok(Node {
+            token,
+            left: None,
+            right: None,
+        })
+    }
+
+    // Recursive function to build AST from tokens
+    fn build_ast(tokens: Vec<String>) -> Result<Node, RulesError> {
+        let tokens: Vec<String> = if tokens.len() > 2
+            && tokens.first() == Some(&"(".to_string())
+            && tokens.last() == Some(&")".to_string())
+        {
+            tokens[1..tokens.len() - 1].to_vec()
+        } else {
+            tokens
+        };
+
+        // If no logical operators, this is a leaf node
+        // E.g., ["colour", "=", "red"] is a leaf
+        if !Self::contains_logical_op(&tokens) {
+            return Self::create_leaf_node(tokens);
+        }
+
+        let op_index = Self::find_lowest_prec_op_index(&tokens);
+
+        let operator_str = &tokens[op_index];
+        let operator_token = if operator_str == "&" {
+            crate::parser::types::Token::And
+        } else if operator_str == "|" {
+            crate::parser::types::Token::Or
+        } else {
+            return Err(RulesError::RuleParseError(format!(
+                "Expected logical operator, found: {}",
+                operator_str
+            )));
+        };
+
+        // Split tokens into left and right subtrees
+        // e.g. left: ["colour", "=", "red"]
+        //      right: ["size", "=", "large"]
+        let left_tokens = tokens[0..op_index].to_vec();
+        let right_tokens = tokens[op_index + 1..].to_vec();
+
+        // Build subtrees
+        let left_child = Self::build_ast(left_tokens)?;
+        let right_child = Self::build_ast(right_tokens)?;
+
+        Ok(Node {
+            token: operator_token,
+            left: Some(Box::new(left_child)),
+            right: Some(Box::new(right_child)),
+        })
+    }
+
+    fn string_to_rule(&self, rule_str: &str) -> Result<Rule, RulesError> {
+        // Validate the rule syntax first
+        Self::validate_rule(&self, rule_str)?;
+
+        // Tokenize the rule string into a vector of tokens
+        // E.g., "colour = red & size = large" becomes:
+        // ["colour", "=", "red", "&", "size", "=", "large"]
+        let tokens = Self::tokenise_rule(rule_str)?;
+
+        // Build the AST recursively from the tokens
+        // This creates a tree structure where:
+        // - Internal nodes are operators (&, |, =, !)
+        // - Leaf nodes are comparisons (colour = red)
+        let root = Self::build_ast(tokens)?;
+
+        // Wrap the root node in a Rule struct
+        // (The Rule struct contains a Vec<Node>, but for now we just have one root)
+        Ok(Rule { nodes: vec![root] })
     }
 
     fn rule_to_dnf_subrule(&self, rule: Rule) -> Result<SubRule, RulesError> {

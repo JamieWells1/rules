@@ -1,4 +1,5 @@
 // Parser-specific types
+use std::collections::HashSet;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum TokenType {
@@ -30,6 +31,9 @@ pub struct Node {
     pub left: Option<Box<Node>>,
     pub right: Option<Box<Node>>,
 }
+
+// Node represented as strings -- e.g. ("|", ["colour", "=", "blue"], ["colour", "!", "red"])
+pub type NodeStr = (String, Vec<String>, Vec<String>);
 
 pub struct Rule {
     pub nodes: Vec<Node>,
