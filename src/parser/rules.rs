@@ -1,11 +1,11 @@
 // Parser for .rules files
 use crate::err::RulesError;
-use crate::parser::types::{MappedRuleTokens, Node, AstRule, TokenDepth, TokenType};
-use crate::types::{self, SubRule};
+use crate::parser::types::{AstRule, MappedRuleTokens, Node, Token, TokenDepth, TokenType};
+use crate::types::{self, ComparisonOp, SubRule};
 use crate::utils::file;
 use crate::utils::string;
 
-use std::collections::{HashMap};
+use std::collections::HashMap;
 use std::sync::LazyLock;
 
 static TOKEN_PRECEDENCE: LazyLock<HashMap<&str, i32>> = LazyLock::new(|| {
@@ -479,8 +479,32 @@ impl RuleParser {
         Ok(AstRule { root_node: root })
     }
 
+    fn ast_to_dnf(&self, node: &Node) -> Result<Vec<SubRule>, RulesError> {
+        match node.token {
+            Token::Equals | Token::NotEquals => {
+                // create subrule
+                Ok(vec![])
+            }
+            Token::Or => {
+                let left_clauses = self.ast_to_dnf(node.left.as_ref().unwrap())?;
+                let right_clauses = self.ast_to_dnf(node.right.as_ref().unwrap())?;
+                // concatenate the clauses (add)
+                Ok(vec![])
+            }
+            Token::And => {
+                let left_clauses = self.ast_to_dnf(node.left.as_ref().unwrap())?;
+                let right_clauses = self.ast_to_dnf(node.right.as_ref().unwrap())?;
+                // cross multiply
+                Ok(vec![])
+            }
+            _ => Err(RulesError::RuleParseError(
+                format!("Invalid token: {}", node.token).to_string(),
+            )),
+        }
+    }
+
     fn rule_to_dnf_subrule(&self, rule: AstRule) -> Result<SubRule, RulesError> {
-        unimplemented!()
+        self.ast_to_dnf(&rule.root_node)
     }
 
     // Main entry point for parsing rule files.
@@ -811,13 +835,23 @@ mod tests {
     // Tests for contains_logical_op
     #[test]
     fn test_contains_logical_op_with_and() {
-        let tokens = vec!["colour".to_string(), "=".to_string(), "red".to_string(), "&".to_string()];
+        let tokens = vec![
+            "colour".to_string(),
+            "=".to_string(),
+            "red".to_string(),
+            "&".to_string(),
+        ];
         assert!(RuleParser::contains_logical_op(&tokens));
     }
 
     #[test]
     fn test_contains_logical_op_with_or() {
-        let tokens = vec!["colour".to_string(), "=".to_string(), "red".to_string(), "|".to_string()];
+        let tokens = vec![
+            "colour".to_string(),
+            "=".to_string(),
+            "red".to_string(),
+            "|".to_string(),
+        ];
         assert!(RuleParser::contains_logical_op(&tokens));
     }
 
